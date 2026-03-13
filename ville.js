@@ -1,9 +1,11 @@
+window.addEventListener('load', function() {
+
 // ============================================
 //  Scène — ambiance jour ensoleillé
 // ============================================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.FogExp2(0xb8ddf0, 0.016);
+scene.fog = new THREE.FogExp2(0xb8ddf0, 0.008);
 
 const W = window.innerWidth, H = window.innerHeight;
 const camera = new THREE.PerspectiveCamera(60, W/H, 0.1, 300);
@@ -32,7 +34,7 @@ const fill = new THREE.DirectionalLight(0xffd4a0, 0.5);
 fill.position.set(-15, 10, -10); scene.add(fill);
 
 // Sol herbe
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshLambertMaterial({ color:0x5aaa32 }));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({ color:0x5aaa32 }));
 ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
 
 // Routes
@@ -40,13 +42,13 @@ function road(w, h, x, z) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ color:0xc8b89a }));
   m.rotation.x = -Math.PI/2; m.position.set(x, 0.01, z); m.receiveShadow = true; scene.add(m);
 }
-for (let i = -1; i <= 4; i++) { road(100, 0.8, 0, i*3.5-0.5); road(0.8, 100, i*3.5-0.5, 0); }
+for (let i = 0; i <= 8; i++) { road(200, 1.6, 0, i*10.0); road(1.6, 200, i*10.0, 0); }
 
 // Trottoirs
-for (let i = -1; i <= 4; i++) {
-  for (let j = -1; j <= 4; j++) {
-    const curb = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), new THREE.MeshLambertMaterial({ color:0xddccbb }));
-    curb.rotation.x = -Math.PI/2; curb.position.set(i*3.5-0.5, 0.015, j*3.5-0.5); scene.add(curb);
+for (let i = 0; i <= 8; i++) {
+  for (let j = 0; j <= 8; j++) {
+    const curb = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), new THREE.MeshLambertMaterial({ color:0xddccbb }));
+    curb.rotation.x = -Math.PI/2; curb.position.set(i*10.0, 0.015, j*10.0); scene.add(curb);
   }
 }
 
@@ -78,11 +80,13 @@ function tree(x, z) {
   g.scale.setScalar(.85+Math.random()*.3);
   scene.add(g);
 }
-[[-3.5,-3.5],[-3.5,0],[-3.5,3.5],[-3.5,7],[-3.5,10.5],[-3.5,14],
- [0,-3.5],[3.5,-3.5],[7,-3.5],[10.5,-3.5],[14,-3.5],
- [0,14],[3.5,14],[7,14],[10.5,14],[14,14],
- [17.5,-3.5],[17.5,0],[17.5,3.5],[17.5,7],[17.5,10.5],[17.5,14],
- [-7,3],[-7,7],[20,3],[20,7]].forEach(([x,z]) => tree(x,z));
+[
+  [-6,-6],[-6,5],[-6,15],[-6,25],[-6,35],[-6,45],[-6,55],[-6,65],[-6,75],[-6,85],
+  [5,-6],[15,-6],[25,-6],[35,-6],[45,-6],[55,-6],[65,-6],[75,-6],[85,-6],
+  [5,90],[15,90],[25,90],[35,90],[45,90],[55,90],[65,90],[75,90],[85,90],
+  [90,-6],[90,5],[90,15],[90,25],[90,35],[90,45],[90,55],[90,65],[90,75],[90,85],
+  [-14,20],[-14,45],[97,20],[97,45]
+].forEach(([x,z]) => tree(x,z));
 
 // Bancs et lampadaires
 function bench(x, z) {
@@ -103,8 +107,8 @@ function lamp(x, z) {
   head.position.y = 2.3; g.add(head);
   g.position.set(x,0,z); scene.add(g);
 }
-[[-.8,-.8],[-.8,3.2],[-.8,6.7],[3.2,-.8],[6.7,-.8]].forEach(([x,z]) => lamp(x,z));
-[[1.2,-.4],[4.7,-.4],[1.2,3.1]].forEach(([x,z]) => bench(x,z));
+[[0,10],[0,20],[0,30],[0,40],[0,50],[0,60],[0,70],[10,0],[20,0],[30,0],[40,0],[50,0],[60,0],[70,0]].forEach(([x,z]) => lamp(x,z));
+[[1,1],[11,1],[21,1],[31,1],[1,11],[1,21]].forEach(([x,z]) => bench(x,z));
 
 // ============================================
 //  Helpers bâtiments
@@ -254,29 +258,39 @@ const BUILDERS = {
 //  Placement des bâtiments
 // ============================================
 const buildingGroups = [];
+const buildingBoxes = [];
 const LABELS = {tent:'Tente',house:'Maison',shop:'Épicerie',flat:'Immeuble',factory:'Usine',town_hall:'Mairie',tower:'Tour',cathedral:'Cathédrale'};
 
-BUILDINGS_DATA.forEach((b, i) => {
+const SPACING = 10.0; // taille d'une case (route + bâtiment)
+
+BUILDINGS_DATA.forEach((b) => {
   const g = new THREE.Group();
   if (BUILDERS[b.type]) BUILDERS[b.type](g);
-  g.position.set(b.pos_x*3.5, -5, b.pos_z*3.5);
+  g.scale.setScalar(2.2);
+  g.position.set(b.pos_x * SPACING + 5, 0, b.pos_z * SPACING + 5); // centré dans sa case
   g.userData.label = LABELS[b.type] || b.type;
   scene.add(g);
   buildingGroups.push(g);
-  setTimeout(() => {
-    const rise = setInterval(() => {
-      const dy = (0 - g.position.y) * .14;
-      g.position.y += dy;
-      if (Math.abs(g.position.y) < .015) { g.position.y = 0; clearInterval(rise); }
-    }, 16);
-  }, i * 160);
+
+  // Boîtes de collision au bon espacement
+  const sizes = {
+    tent:[3.,3.,3.3], house:[4.4,4.4,4.8], shop:[5.3,4.8,4.4],
+    flat:[4.8,4.8,15.4], factory:[7.5,6.6,6.6], town_hall:[8.8,7.9,12.1],
+    tower:[6.2,6.2,33.], cathedral:[7.5,14.,24.2]
+  };
+  const sz = sizes[b.type] || [4,4,5];
+  const cx = b.pos_x * SPACING + 5, cz = b.pos_z * SPACING + 5;
+  buildingBoxes.push(new THREE.Box3(
+    new THREE.Vector3(cx - sz[0]/2, 0,      cz - sz[1]/2),
+    new THREE.Vector3(cx + sz[0]/2, sz[2],  cz + sz[1]/2)
+  ));
 });
 
 // ============================================
 //  MODE ORBITAL
 // ============================================
 let drag=false, lx=0, ly=0, theta=0.78, phi=0.82, radius=26;
-const orbitTarget = new THREE.Vector3(7, 0, 7);
+const orbitTarget = new THREE.Vector3(40, 0, 40);
 
 function updateOrbit() {
   camera.position.set(
@@ -288,68 +302,139 @@ function updateOrbit() {
 }
 
 // ============================================
-//  MODE FPS
+//  MODE FPS — physique, bob, collisions
 // ============================================
 let fpsMode = false;
 let fpsYaw = 0, fpsPitch = 0;
-const fpsPos = new THREE.Vector3(7, 1.7, 18); // position départ
-const fpsSpeed = 0.08;
+const fpsPos    = new THREE.Vector3(7, 1.7, 18);
+const fpsVel    = new THREE.Vector3(0, 0, 0);   // vélocité (gravité)
+const GRAVITY   = -18;
+const JUMP_V    = 6.5;
+const EYE_H     = 1.7;  // hauteur des yeux
+let onGround    = false;
+let bobTime     = 0;
+
 const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true; });
+window.addEventListener('keyup',   e => { keys[e.code] = false; });
 
 // Pointer lock
 renderer.domElement.addEventListener('click', () => {
   if (fpsMode) renderer.domElement.requestPointerLock();
 });
-document.addEventListener('pointerlockchange', () => {
-  if (!document.pointerLockElement) { /* sorti du lock, ok */ }
-});
 document.addEventListener('mousemove', e => {
   if (!fpsMode || !document.pointerLockElement) return;
   fpsYaw   -= e.movementX * 0.002;
-  fpsPitch  = Math.max(-1.2, Math.min(1.2, fpsPitch - e.movementY * 0.002));
+  fpsPitch  = Math.max(-1.1, Math.min(1.1, fpsPitch - e.movementY * 0.002));
 });
-
-window.addEventListener('keydown', e => { keys[e.code] = true; });
-window.addEventListener('keyup',   e => { keys[e.code] = false; });
 
 // Touche F pour basculer
 window.addEventListener('keydown', e => {
   if (e.code !== 'KeyF') return;
   fpsMode = !fpsMode;
-  const hint = document.getElementById('hint');
+  const hint   = document.getElementById('hint');
   const fpshint = document.getElementById('fps-hint');
   if (fpsMode) {
-    // Passe en FPS — positionne le joueur face à la ville
-    fpsPos.set(7, 1.7, 18);
-    fpsYaw = Math.PI;
-    fpsPitch = 0;
+    fpsPos.set(5, EYE_H, -5);  // sur la route, face à la ville
+    fpsVel.set(0,0,0);
+    fpsYaw = 0; fpsPitch = 0;  // face à la ville
     renderer.domElement.requestPointerLock();
+    camera.fov = 75; camera.updateProjectionMatrix();
     hint.style.display = 'none';
     if (fpshint) fpshint.style.display = 'block';
   } else {
     document.exitPointerLock();
+    camera.fov = 60; camera.updateProjectionMatrix();
     updateOrbit();
     hint.style.display = 'block';
     if (fpshint) fpshint.style.display = 'none';
   }
 });
 
+// Saut à la barre espace
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && fpsMode && onGround) fpsVel.y = JUMP_V;
+});
+
 function updateFPS(dt) {
-  // Direction regard
-  const forward = new THREE.Vector3(-Math.sin(fpsYaw)*Math.cos(fpsPitch), 0, -Math.cos(fpsYaw)*Math.cos(fpsPitch)).normalize();
-  const right   = new THREE.Vector3(Math.cos(fpsYaw), 0, -Math.sin(fpsYaw)).normalize();
-  const speed   = (keys['ShiftLeft'] || keys['ShiftRight']) ? fpsSpeed * 2.5 : fpsSpeed;
+  const running = keys['ShiftLeft'] || keys['ShiftRight'];
+  const speed   = running ? 7.5 : 4.0;  // unités/sec (plus naturel qu'un ratio fixe)
 
-  if (keys['KeyW'] || keys['ArrowUp'])    fpsPos.addScaledVector(forward,  speed);
-  if (keys['KeyS'] || keys['ArrowDown'])  fpsPos.addScaledVector(forward, -speed);
-  if (keys['KeyA'] || keys['ArrowLeft'])  fpsPos.addScaledVector(right,   -speed);
-  if (keys['KeyD'] || keys['ArrowRight']) fpsPos.addScaledVector(right,    speed);
+  // Directions horizontales (ignore composante Y du regard)
+  const forward = new THREE.Vector3(-Math.sin(fpsYaw), 0, -Math.cos(fpsYaw));
+  const right   = new THREE.Vector3( Math.cos(fpsYaw), 0, -Math.sin(fpsYaw));
 
-  // Clamp hauteur
-  fpsPos.y = 1.7;
+  const move = new THREE.Vector3();
+  if (keys['KeyW'] || keys['ArrowUp'])    move.addScaledVector(forward,  1);
+  if (keys['KeyS'] || keys['ArrowDown'])  move.addScaledVector(forward, -1);
+  if (keys['KeyA'] || keys['ArrowLeft'])  move.addScaledVector(right,   -1);
+  if (keys['KeyD'] || keys['ArrowRight']) move.addScaledVector(right,    1);
+  if (move.lengthSq() > 0) move.normalize().multiplyScalar(speed * dt);
 
-  // Applique à la caméra
-  camera.position.copy(fpsPos);
+  // --- Gravité ---
+  fpsVel.y += GRAVITY * dt;
+  const nextPos = fpsPos.clone().add(move).add(new THREE.Vector3(0, fpsVel.y * dt, 0));
+
+  // --- Sol ---
+  if (nextPos.y <= EYE_H) {
+    nextPos.y  = EYE_H;
+    fpsVel.y   = 0;
+    onGround   = true;
+  } else {
+    onGround = false;
+  }
+
+  // --- Collisions bâtiments (AABB simple, rayon joueur = 0.4) ---
+  const PLAYER_R = 0.4;
+  const playerBox = new THREE.Box3(
+    new THREE.Vector3(nextPos.x - PLAYER_R, nextPos.y - EYE_H,        nextPos.z - PLAYER_R),
+    new THREE.Vector3(nextPos.x + PLAYER_R, nextPos.y - EYE_H + 2.2,  nextPos.z + PLAYER_R)
+  );
+
+  let blocked = false;
+  for (const bb of buildingBoxes) {
+    if (playerBox.intersectsBox(bb)) { blocked = true; break; }
+  }
+
+  if (!blocked) {
+    fpsPos.copy(nextPos);
+  } else {
+    // Essaie de glisser sur X seulement
+    const slideX = fpsPos.clone().add(new THREE.Vector3(move.x, fpsVel.y * dt, 0));
+    slideX.y = Math.max(slideX.y, EYE_H);
+    const boxX = new THREE.Box3(
+      new THREE.Vector3(slideX.x - PLAYER_R, slideX.y - EYE_H,       slideX.z - PLAYER_R),
+      new THREE.Vector3(slideX.x + PLAYER_R, slideX.y - EYE_H + 2.2, slideX.z + PLAYER_R)
+    );
+    let blockedX = buildingBoxes.some(bb => boxX.intersectsBox(bb));
+    if (!blockedX) { fpsPos.copy(slideX); fpsVel.y = slideX.y === EYE_H ? 0 : fpsVel.y; }
+    else {
+      // Essaie de glisser sur Z seulement
+      const slideZ = fpsPos.clone().add(new THREE.Vector3(0, fpsVel.y * dt, move.z));
+      slideZ.y = Math.max(slideZ.y, EYE_H);
+      const boxZ = new THREE.Box3(
+        new THREE.Vector3(slideZ.x - PLAYER_R, slideZ.y - EYE_H,       slideZ.z - PLAYER_R),
+        new THREE.Vector3(slideZ.x + PLAYER_R, slideZ.y - EYE_H + 2.2, slideZ.z + PLAYER_R)
+      );
+      let blockedZ = buildingBoxes.some(bb => boxZ.intersectsBox(bb));
+      if (!blockedZ) { fpsPos.copy(slideZ); fpsVel.y = slideZ.y === EYE_H ? 0 : fpsVel.y; }
+      // Sinon on reste sur place
+    }
+  }
+
+  // --- Bob de caméra ---
+  const isMoving = move.lengthSq() > 0 && onGround;
+  if (isMoving) bobTime += dt * (running ? 12 : 7);
+  const bobY = isMoving ? Math.sin(bobTime) * 0.055 : 0;
+  const bobX = isMoving ? Math.sin(bobTime * 0.5) * 0.025 : 0;
+
+  // --- FOV dynamique (course) ---
+  const targetFov = running && isMoving ? 88 : 75;
+  camera.fov += (targetFov - camera.fov) * 0.12;
+  camera.updateProjectionMatrix();
+
+  // --- Applique à la caméra ---
+  camera.position.set(fpsPos.x + bobX, fpsPos.y + bobY, fpsPos.z);
   camera.rotation.order = 'YXZ';
   camera.rotation.y = fpsYaw;
   camera.rotation.x = fpsPitch;
@@ -410,3 +495,5 @@ animate();
 
 setTimeout(()=>{ const t=document.getElementById('toast'); if(t)t.classList.add('hidden'); }, 4500);
 window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);});
+
+});
