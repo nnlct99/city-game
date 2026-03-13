@@ -97,6 +97,7 @@ $buildings_json = json_encode(array_map(fn($b) => ['type' => $b['type'], 'pos_x'
 <div id="toast"<?php if ($new_building) echo ' class="new-building"'; ?>><?= htmlspecialchars($visit_message) ?></div>
 <div id="tooltip"></div>
 <div id="hint">🖱 Clic + glisser pour tourner · Molette pour zoomer · <strong>F</strong> pour mode FPS</div>
+<div id="crosshair"></div>
 <div id="fps-hint" style="display:none">🎮 <strong>ZQSD / Flèches</strong> pour avancer · <strong>Souris</strong> pour regarder · <strong>Shift</strong> pour courir · <strong>F</strong> pour quitter</div>
 
 <?php if ($next): ?>

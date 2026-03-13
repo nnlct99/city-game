@@ -139,21 +139,23 @@ const BUILDERS = {
   },
 
   house(g) {
-    const walls=box3(1.8,1.1,1.8,0xf5dfa0); walls.position.y=.55; g.add(walls);
-    const roof=new THREE.Mesh(new THREE.ConeGeometry(1.5,.95,4),new THREE.MeshLambertMaterial({color:0xcc3311}));
+    const walls=box3(1.8,1.1,1.8,0xe8c99a); walls.position.y=.55; g.add(walls);
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(1.5,.95,4),new THREE.MeshLambertMaterial({color:0x9b3a1a}));
     roof.rotation.y=Math.PI/4; roof.position.y=1.58; roof.castShadow=true; g.add(roof);
-    [[-.5,.62,.91],[.5,.62,.91]].forEach(([x,y,z])=>{ const w=box3(.3,.3,.04,0xaad4f5); w.position.set(x,y,z); g.add(w); });
-    const door=box3(.32,.56,.04,0x8B4513); door.position.set(0,.28,.91); g.add(door);
-    const ch=box3(.2,.42,.2,0xcc8855); ch.position.set(.42,1.82,.2); ch.castShadow=true; g.add(ch);
+    [[-.5,.62,.91],[.5,.62,.91]].forEach(([x,y,z])=>{ const w=box3(.3,.3,.04,0xddeeff); w.position.set(x,y,z); g.add(w); });
+    const shutter1=box3(.1,.3,.03,0x5a7a3a); shutter1.position.set(-.66,.62,.92); g.add(shutter1);
+    const shutter2=box3(.1,.3,.03,0x5a7a3a); shutter2.position.set(.66,.62,.92); g.add(shutter2);
+    const door=box3(.32,.56,.04,0x7a4a20); door.position.set(0,.28,.91); g.add(door);
+    const ch=box3(.2,.42,.2,0xb07040); ch.position.set(.42,1.82,.2); ch.castShadow=true; g.add(ch);
   },
 
   shop(g) {
-    const base=box3(2.2,1.6,2.,0x4a9fd4); base.position.y=.8; g.add(base);
-    wins(base,2.2,1.6,2.,1,2,0xfff5cc);
-    const roof=box3(2.4,.12,2.2,0x2a7ab0); roof.position.y=1.66; g.add(roof);
-    const awn=box3(2.5,.08,.72,0xff6622); awn.position.set(0,1.,.135); awn.rotation.x=.25; g.add(awn);
-    const sign=box3(1.5,.32,.06,0xff8800); sign.position.set(0,1.3,1.04); g.add(sign);
-    const door=box3(.38,.65,.04,0x1a4a6a); door.position.set(0,.32,1.01); g.add(door);
+    const base=box3(2.2,1.6,2.,0xd4825a); base.position.y=.8; g.add(base);
+    wins(base,2.2,1.6,2.,1,2,0xfff8e8);
+    const roof=box3(2.4,.15,2.2,0xa09070); roof.position.y=1.66; g.add(roof);
+    const awn=box3(2.5,.08,.72,0x4a8a3a); awn.position.set(0,1.,.135); awn.rotation.x=.25; g.add(awn);
+    const sign=box3(1.5,.3,.06,0xcc6600); sign.position.set(0,1.28,1.04); g.add(sign);
+    const door=box3(.38,.65,.04,0x4a2a0a); door.position.set(0,.32,1.01); g.add(door);
   },
 
   // IMMEUBLE : un seul bloc continu, pas de sections empilées
@@ -161,16 +163,16 @@ const BUILDERS = {
     // Socle
     const soc=box3(2.2,.3,2.2,0xccbbaa); soc.position.y=.15; g.add(soc);
     // Corps unique — un seul mesh pour éviter tout gap
-    const main=box3(2.,6.,2.,0xf0e0c0); main.position.y=3.3; g.add(main);
-    wins(main,2.,6.,2.,7,2,0xaad4f5);
+    const main=box3(2.,6.,2.,0xd8cdb8); main.position.y=3.3; g.add(main);
+    wins(main,2.,6.,2.,7,2,0xeef4ff);
     // Balcons intégrés (légèrement en avant, pas de gap)
     for(let f=0;f<4;f++){
       const bal=box3(2.1,.08,.42,0xccbbaa); bal.position.set(0,.7+f*1.45,1.21); g.add(bal);
       const rail=box3(2.1,.18,.03,0xbbaa99); rail.position.set(0,.86+f*1.45,1.42); g.add(rail);
     }
     // Couronnement toit
-    const roof=box3(2.2,.2,2.2,0xbbaa99); roof.position.y=6.4; g.add(roof);
-    const parapet=box3(2.2,.3,2.2,0xccbbaa); parapet.position.y=6.65; g.add(parapet);
+    const roof=box3(2.2,.2,2.2,0x7a6a5a); roof.position.y=6.4; g.add(roof);
+    const parapet=box3(2.2,.3,2.2,0x8a7a6a); parapet.position.y=6.65; g.add(parapet);
     // Antenne
     const ant=box3(.04,.8,.04,0x888); ant.position.set(.5,7.1,.5); g.add(ant);
     // Porte
@@ -178,11 +180,11 @@ const BUILDERS = {
   },
 
   factory(g) {
-    const main=box3(3.2,2.2,2.8,0xb8b8b8); main.position.y=1.1; g.add(main);
-    wins(main,3.2,2.2,2.8,1,3,0xffdd88);
-    for(let i=0;i<3;i++){const s=box3(.9,.5,2.8,0xaaa); s.position.set(-1+i*1.,2.45,0); g.add(s);}
+    const main=box3(3.2,2.2,2.8,0xa05030); main.position.y=1.1; g.add(main);
+    wins(main,3.2,2.2,2.8,1,3,0xffe8aa);
+    for(let i=0;i<3;i++){const s=box3(.9,.5,2.8,0x804020); s.position.set(-1+i*1.,2.45,0); g.add(s);}
     [[1.,2.],[-.8,2.5]].forEach(([ox,h])=>{
-      const ch=box3(.35,h,.35,0x888); ch.position.set(ox,2.2+h/2,0); ch.castShadow=true; g.add(ch);
+      const ch=box3(.35,h,.35,0x555); ch.position.set(ox,2.2+h/2,0); ch.castShadow=true; g.add(ch);
       const sm=new THREE.Mesh(new THREE.CylinderGeometry(.22,.14,.4,8),new THREE.MeshLambertMaterial({color:0xccc,transparent:true,opacity:.45}));
       sm.position.set(ox,2.2+h+.3,0); g.add(sm);
     });
@@ -218,17 +220,17 @@ const BUILDERS = {
   // TOUR : un seul corps continu qui s'affine par setScale, pas de sections séparées
   tower(g) {
     // Podium large
-    const pod=box3(2.6,.6,2.6,0xc0b8b0); pod.position.y=.3; g.add(pod);
+    const pod=box3(2.6,.6,2.6,0x6a8090); pod.position.y=.3; g.add(pod);
     // Corps principal unique — un seul mesh haut
-    const body=box3(1.8,11.,1.8,0xe0d8d0); body.position.y=6.1; g.add(body);
-    wins(body,1.8,11.,1.8,10,2,0xaad4f5);
+    const body=box3(1.8,11.,1.8,0x8aa0b0); body.position.y=6.1; g.add(body);
+    wins(body,1.8,11.,1.8,10,2,0xd0eeff);
     // Bandes horizontales décoratives (pas de gap, juste des reliefs)
     [2.1, 4.6, 7.1, 9.6].forEach(y=>{
-      const band=box3(1.9,.1,1.9,0xc8c0b8); band.position.y=y; g.add(band);
+      const band=box3(1.9,.1,1.9,0x506070); band.position.y=y; g.add(band);
     });
     // Couronnement
-    const crown=box3(2.0,.25,2.0,0xb8b0a8); crown.position.y=11.72; g.add(crown);
-    const top=box3(1.4,.4,1.4,0xaaa8a0); top.position.y=12.1; g.add(top);
+    const crown=box3(2.0,.25,2.0,0x506070); crown.position.y=11.72; g.add(crown);
+    const top=box3(1.4,.4,1.4,0x405060); top.position.y=12.1; g.add(top);
     // Antenne + lumière
     const ant=box3(.05,2.2,.05,0x999); ant.position.y=13.4; g.add(ant);
     const light=new THREE.Mesh(new THREE.SphereGeometry(.1,8,8),new THREE.MeshLambertMaterial({color:0xff2222,emissive:new THREE.Color(0xff0000),emissiveIntensity:1.5}));
@@ -238,14 +240,14 @@ const BUILDERS = {
   },
 
   cathedral(g) {
-    const nave=box3(3.,3.5,6.,0xd4c4e8); nave.position.y=1.75; g.add(nave);
-    wins(nave,3.,3.5,6.,2,2,0x88ccff);
-    const tower=box3(1.6,7.,1.6,0xc4b4d8); tower.position.y=4.8; g.add(tower);
-    const spire=new THREE.Mesh(new THREE.ConeGeometry(1.,3.5,4),new THREE.MeshLambertMaterial({color:0x9a7ab4}));
+    const nave=box3(3.,3.5,6.,0xc8bca8); nave.position.y=1.75; g.add(nave);
+    wins(nave,3.,3.5,6.,2,2,0xeef4ff);
+    const tower=box3(1.6,7.,1.6,0xb8ac98); tower.position.y=4.8; g.add(tower);
+    const spire=new THREE.Mesh(new THREE.ConeGeometry(1.,3.5,4),new THREE.MeshLambertMaterial({color:0x708060}));
     spire.position.y=9.75; spire.rotation.y=Math.PI/4; spire.castShadow=true; g.add(spire);
     [[-1.5,3.2,0],[1.5,3.2,0]].forEach(([x,y,z])=>{
-      const st=box3(.7,2.5,.7,0xc4b4d8); st.position.set(x,y,z); g.add(st);
-      const ss=new THREE.Mesh(new THREE.ConeGeometry(.45,1.2,4),new THREE.MeshLambertMaterial({color:0x9a7ab4}));
+      const st=box3(.7,2.5,.7,0xb8ac98); st.position.set(x,y,z); g.add(st);
+      const ss=new THREE.Mesh(new THREE.ConeGeometry(.45,1.2,4),new THREE.MeshLambertMaterial({color:0x708060}));
       ss.position.set(x,y+1.85,z); ss.rotation.y=Math.PI/4; ss.castShadow=true; g.add(ss);
     });
     const rose=new THREE.Mesh(new THREE.CircleGeometry(.55,16),new THREE.MeshLambertMaterial({color:0xffcc44,emissive:new THREE.Color(0xff8800),emissiveIntensity:.6}));
@@ -262,15 +264,43 @@ const buildingBoxes = [];
 const LABELS = {tent:'Tente',house:'Maison',shop:'Épicerie',flat:'Immeuble',factory:'Usine',town_hall:'Mairie',tower:'Tour',cathedral:'Cathédrale'};
 
 const SPACING = 10.0; // taille d'une case (route + bâtiment)
+let cityReady = false; // devient true quand tous les bâtiments ont fini de spawner
 
 BUILDINGS_DATA.forEach((b) => {
   const g = new THREE.Group();
   if (BUILDERS[b.type]) BUILDERS[b.type](g);
   g.scale.setScalar(2.2);
-  g.position.set(b.pos_x * SPACING + 5, 0, b.pos_z * SPACING + 5); // centré dans sa case
+  g.position.set(b.pos_x * SPACING + 5, -8, b.pos_z * SPACING + 5);
+  g.visible = false; // caché jusqu'au début de son animation
   g.userData.label = LABELS[b.type] || b.type;
   scene.add(g);
   buildingGroups.push(g);
+
+  // Animation de surgissement avec délai par bâtiment
+  const idx = buildingGroups.length - 1;
+  // Vitesse adaptée à la hauteur — les grands bâtiments montent plus lentement
+  const heights = {tent:1.5,house:2.2,shop:2.,flat:7.,factory:3.,town_hall:5.5,tower:15.,cathedral:11.};
+  const bHeight = heights[b.type] || 3.;
+  const riseSpeed = 0.06 + (1 / bHeight) * 0.08; // plus haut = plus lent
+  const startY = -bHeight * 2.2; // part de sous terre proportionnellement
+  g.position.y = startY;
+
+  setTimeout(() => {
+    g.visible = true;
+    const rise = setInterval(() => {
+      const dy = (0 - g.position.y) * riseSpeed;
+      g.position.y += dy;
+      if (Math.abs(g.position.y) < 0.02) {
+        g.position.y = 0;
+        clearInterval(rise);
+        if (idx === buildingGroups.length - 1) {
+          cityReady = true;
+          const hint = document.getElementById('hint');
+          if (hint) hint.style.opacity = '1';
+        }
+      }
+    }, 16);
+  }, idx * 150);
 
   // Boîtes de collision au bon espacement
   const sizes = {
@@ -331,23 +361,36 @@ document.addEventListener('mousemove', e => {
 // Touche F pour basculer
 window.addEventListener('keydown', e => {
   if (e.code !== 'KeyF') return;
+  if (!cityReady) return; // ville pas encore prête
   fpsMode = !fpsMode;
   const hint   = document.getElementById('hint');
   const fpshint = document.getElementById('fps-hint');
   if (fpsMode) {
-    fpsPos.set(5, EYE_H, -5);  // sur la route, face à la ville
+    fpsPos.set(0, EYE_H, -3);  // sur la route centrale, face à la ville
     fpsVel.set(0,0,0);
     fpsYaw = 0; fpsPitch = 0;  // face à la ville
-    renderer.domElement.requestPointerLock();
+    // Reset complet de la caméra avant le pointer lock
+    fpsPos.set(0, EYE_H, -3);
+    fpsVel.set(0, 0, 0);
+    fpsYaw = 0; fpsPitch = 0;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(0, 0, 0);
+    camera.position.set(0, EYE_H, -3);
     camera.fov = 75; camera.updateProjectionMatrix();
+    renderer.domElement.requestPointerLock();
     hint.style.display = 'none';
     if (fpshint) fpshint.style.display = 'block';
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) crosshair.style.display = 'block';
+    cityReady = true;
   } else {
     document.exitPointerLock();
     camera.fov = 60; camera.updateProjectionMatrix();
     updateOrbit();
     hint.style.display = 'block';
     if (fpshint) fpshint.style.display = 'none';
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) crosshair.style.display = 'none';
   }
 });
 
