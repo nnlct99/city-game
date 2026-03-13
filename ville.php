@@ -4,121 +4,66 @@
 //  URL : http://localhost/city_builder/ville.php?id=1
 // ============================================
 require_once 'config.php';
+session_start();
+
+if (isset($_GET['logout'])) {
+    session_destroy();
+    header('Location: login.php');
+    exit;
+}
 
 $pdo = getPDO();
 
-// --- Récupération de la ville ---
 $city_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($city_id <= 0) { header('Location: index.php'); exit; }
 
-$stmt = $pdo->prepare("
-    SELECT c.*, u.username
-    FROM cities c
-    JOIN users u ON u.id = c.user_id
-    WHERE c.id = ?
-");
+$stmt = $pdo->prepare("SELECT c.*, u.username FROM cities c JOIN users u ON u.id = c.user_id WHERE c.id = ?");
 $stmt->execute([$city_id]);
 $city = $stmt->fetch();
 if (!$city) { echo 'Ville introuvable.'; exit; }
 
-// --- Récupération des bâtiments ---
-$stmt = $pdo->prepare("
-    SELECT b.*, bt.label, bt.population_bonus
-    FROM buildings b
-    JOIN building_types bt ON bt.type = b.type
-    WHERE b.city_id = ?
-    ORDER BY b.unlocked_at ASC
-");
+$stmt = $pdo->prepare("SELECT b.*, bt.label, bt.population_bonus FROM buildings b JOIN building_types bt ON bt.type = b.type WHERE b.city_id = ? ORDER BY b.unlocked_at ASC");
 $stmt->execute([$city_id]);
 $buildings = $stmt->fetchAll();
 
-// --- Logique de visite (anti-spam IP / jour) ---
-$visitor_ip  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-$already_visited = false;
+$visitor_ip      = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 $new_building    = null;
 $visit_message   = '';
 
-$check = $pdo->prepare("
-    SELECT id FROM visits
-    WHERE city_id = ? AND visitor_ip = ? AND DATE(visited_at) = CURDATE()
-");
+$check = $pdo->prepare("SELECT id FROM visits WHERE city_id = ? AND visitor_ip = ? AND visit_date = CURDATE()");
 $check->execute([$city_id, $visitor_ip]);
 
 if (!$check->fetch()) {
-    // Nouvelle visite aujourd'hui
-    $pdo->prepare("INSERT INTO visits (city_id, visitor_ip) VALUES (?, ?)")
-        ->execute([$city_id, $visitor_ip]);
-
-    $pdo->prepare("UPDATE cities SET visits = visits + 1, updated_at = NOW() WHERE id = ?")
-        ->execute([$city_id]);
-
+    $pdo->prepare("INSERT INTO visits (city_id, visitor_ip, visit_date) VALUES (?, ?, CURDATE())")->execute([$city_id, $visitor_ip]);
+    $pdo->prepare("UPDATE cities SET visits = visits + 1, updated_at = NOW() WHERE id = ?")->execute([$city_id]);
     $city['visits']++;
 
-    // Vérifie si un bâtiment se débloque
-    $next = $pdo->prepare("
-        SELECT bt.*
-        FROM building_types bt
-        WHERE bt.visit_threshold = ?
-          AND NOT EXISTS (
-              SELECT 1 FROM buildings b
-              WHERE b.city_id = ? AND b.type = bt.type
-          )
-        LIMIT 1
-    ");
+    $next = $pdo->prepare("SELECT bt.* FROM building_types bt WHERE bt.visit_threshold = ? AND NOT EXISTS (SELECT 1 FROM buildings b WHERE b.city_id = ? AND b.type = bt.type) LIMIT 1");
     $next->execute([$city['visits'], $city_id]);
     $unlock = $next->fetch();
 
     if ($unlock) {
-        // Calcule une position libre sur la grille
-        $taken = array_map(fn($b) => $b['pos_x'].','.$b['pos_z'], $buildings);
         $pos_x = count($buildings) % 8;
         $pos_z = intdiv(count($buildings), 8);
-
-        $pdo->prepare("
-            INSERT INTO buildings (city_id, type, pos_x, pos_z)
-            VALUES (?, ?, ?, ?)
-        ")->execute([$city_id, $unlock['type'], $pos_x, $pos_z]);
-
-        $pdo->prepare("
-            UPDATE cities SET population = population + ? WHERE id = ?
-        ")->execute([$unlock['population_bonus'], $city_id]);
-
+        $pdo->prepare("INSERT INTO buildings (city_id, type, pos_x, pos_z) VALUES (?, ?, ?, ?)")->execute([$city_id, $unlock['type'], $pos_x, $pos_z]);
+        $pdo->prepare("UPDATE cities SET population = population + ? WHERE id = ?")->execute([$unlock['population_bonus'], $city_id]);
         $city['population'] += $unlock['population_bonus'];
-
-        // Recharge les bâtiments avec le nouveau
         $stmt->execute([$city_id]);
         $buildings = $stmt->fetchAll();
         $new_building  = $unlock['label'];
-        $visit_message = "Nouveau bâtiment débloqué : {$unlock['label']} !";
+        $visit_message = "🎉 Nouveau bâtiment débloqué : {$unlock['label']} !";
     } else {
         $visit_message = "Merci pour ta visite ! Reviens demain.";
     }
 } else {
-    $already_visited = true;
-    $visit_message   = "Tu as déjà visité cette ville aujourd'hui.";
+    $visit_message = "Tu as déjà visité cette ville aujourd'hui.";
 }
 
-// --- Prochain bâtiment ---
-$next_building = $pdo->prepare("
-    SELECT bt.label, bt.visit_threshold
-    FROM building_types bt
-    WHERE bt.visit_threshold > ?
-      AND NOT EXISTS (
-          SELECT 1 FROM buildings b
-          WHERE b.city_id = ? AND b.type = bt.type
-      )
-    ORDER BY bt.visit_threshold ASC
-    LIMIT 1
-");
-$next_building->execute([$city['visits'], $city_id]);
-$next = $next_building->fetch();
+$next_stmt = $pdo->prepare("SELECT bt.label, bt.visit_threshold FROM building_types bt WHERE bt.visit_threshold > ? AND NOT EXISTS (SELECT 1 FROM buildings b WHERE b.city_id = ? AND b.type = bt.type) ORDER BY bt.visit_threshold ASC LIMIT 1");
+$next_stmt->execute([$city['visits'], $city_id]);
+$next = $next_stmt->fetch();
 
-// JSON des bâtiments pour Three.js
-$buildings_json = json_encode(array_map(fn($b) => [
-    'type'  => $b['type'],
-    'pos_x' => (int)$b['pos_x'],
-    'pos_z' => (int)$b['pos_z'],
-], $buildings));
+$buildings_json = json_encode(array_map(fn($b) => ['type' => $b['type'], 'pos_x' => (int)$b['pos_x'], 'pos_z' => (int)$b['pos_z']], $buildings));
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -126,430 +71,348 @@ $buildings_json = json_encode(array_map(fn($b) => [
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= htmlspecialchars($city['name']) ?> — City Builder</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#1a1a2e; color:#eee; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
-
-  #hud {
-    position: fixed; top: 0; left: 0; right: 0;
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 20px;
-    background: rgba(10,10,30,0.85);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    z-index: 10;
-  }
-  #hud h1 { font-size: 18px; font-weight: 500; }
-  #hud h1 span { font-size: 13px; color: #aaa; font-weight: 400; margin-left: 8px; }
-  .stats { display: flex; gap: 24px; }
-  .stat { text-align: center; }
-  .stat-val { font-size: 20px; font-weight: 600; color: #7ec8e3; }
-  .stat-lbl { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
-
-  #toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: rgba(20,20,50,0.95); border: 1px solid rgba(126,200,227,0.3);
-    color: #eee; padding: 10px 24px; border-radius: 8px;
-    font-size: 14px; z-index: 20;
-    transition: opacity 0.5s ease;
-  }
-  #toast.hidden { opacity: 0; pointer-events: none; }
-
-  <?php if ($new_building): ?>
-  #toast { animation: pulse 1s ease 2; border-color: rgba(100,255,150,0.5); }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 rgba(100,255,150,0); } 50% { box-shadow: 0 0 16px rgba(100,255,150,0.4); } }
-  <?php endif; ?>
-
-  #next-info {
-    position: fixed; bottom: 24px; right: 24px;
-    background: rgba(10,10,30,0.85); border: 1px solid rgba(255,255,255,0.08);
-    padding: 10px 16px; border-radius: 8px; font-size: 13px; color: #aaa;
-    z-index: 10;
-  }
-  #next-info strong { color: #7ec8e3; }
-
-  #canvas-container { width: 100vw; height: 100vh; }
-</style>
+<link rel="stylesheet" href="ville.css">
 </head>
 <body>
 
 <div id="hud">
-  <h1>
-    <?= htmlspecialchars($city['name']) ?>
-    <span>par <?= htmlspecialchars($city['username']) ?></span>
-  </h1>
+  <h1><?= htmlspecialchars($city['name']) ?><span>par <?= htmlspecialchars($city['username']) ?></span></h1>
   <div class="stats">
-    <div class="stat">
-      <div class="stat-val"><?= number_format($city['visits']) ?></div>
-      <div class="stat-lbl">Visites</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val"><?= number_format($city['population']) ?></div>
-      <div class="stat-lbl">Habitants</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val"><?= count($buildings) ?></div>
-      <div class="stat-lbl">Bâtiments</div>
-    </div>
+    <div class="stat"><div class="stat-val"><?= number_format($city['visits']) ?></div><div class="stat-lbl">Visites</div></div>
+    <div class="stat"><div class="stat-val"><?= number_format($city['population']) ?></div><div class="stat-lbl">Habitants</div></div>
+    <div class="stat"><div class="stat-val"><?= count($buildings) ?></div><div class="stat-lbl">Bâtiments</div></div>
+  </div>
+  <div class="nav-links">
+    <?php if (isset($_SESSION['city_id']) && $_SESSION['city_id'] == $city_id): ?>
+      <a href="ville.php?id=<?= $city_id ?>&logout=1">Déconnexion</a>
+    <?php elseif (!isset($_SESSION['user_id'])): ?>
+      <a href="login.php">Connexion</a>
+    <?php endif; ?>
+    <a href="index.php">Classement</a>
   </div>
 </div>
 
-<div id="canvas-container"></div>
+<div id="canvas-container" style="width:100vw;height:100vh;"></div>
 
-<div id="toast"><?= htmlspecialchars($visit_message) ?></div>
+<div id="toast"<?php if ($new_building) echo ' class="new-building"'; ?>><?= htmlspecialchars($visit_message) ?></div>
+<div id="tooltip"></div>
+<div id="hint">🖱 Clic + glisser pour tourner · Molette pour zoomer</div>
 
 <?php if ($next): ?>
-<div id="next-info">
-  Prochain : <strong><?= htmlspecialchars($next['label']) ?></strong>
-  dans <?= $next['visit_threshold'] - $city['visits'] ?> visite(s)
-</div>
+<div id="next-info">Prochain : <strong><?= htmlspecialchars($next['label']) ?></strong> dans <?= $next['visit_threshold'] - $city['visits'] ?> visite(s)</div>
 <?php endif; ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ============================================
-//  Rendu 3D de la ville avec Three.js
-// ============================================
-
 const BUILDINGS_DATA = <?= $buildings_json ?>;
 
-// --- Scène ---
-const scene    = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
-scene.fog        = new THREE.Fog(0x1a1a2e, 30, 80);
+// ============================================
+//  Scène — ambiance jour ensoleillé
+// ============================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.FogExp2(0xb8ddf0, 0.016);
 
 const W = window.innerWidth, H = window.innerHeight;
-const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
-camera.position.set(12, 14, 18);
-camera.lookAt(4, 0, 4);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const camera = new THREE.PerspectiveCamera(50, W/H, 0.1, 300);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-// --- Lumières ---
-const ambient = new THREE.AmbientLight(0x334466, 0.8);
-scene.add(ambient);
-
-const sun = new THREE.DirectionalLight(0xffe8b0, 1.4);
-sun.position.set(20, 30, 15);
+// Lumières
+const sun = new THREE.DirectionalLight(0xfffbe8, 2.4);
+sun.position.set(25, 40, 20);
 sun.castShadow = true;
-sun.shadow.mapSize.width  = 2048;
-sun.shadow.mapSize.height = 2048;
-sun.shadow.camera.near = 0.5;
-sun.shadow.camera.far  = 100;
-sun.shadow.camera.left = sun.shadow.camera.bottom = -30;
-sun.shadow.camera.right = sun.shadow.camera.top = 30;
+sun.shadow.mapSize.width = sun.shadow.mapSize.height = 4096;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 120;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -45;
+sun.shadow.camera.right = sun.shadow.camera.top = 45;
+sun.shadow.bias = -0.0005;
 scene.add(sun);
+scene.add(new THREE.AmbientLight(0xc8e8ff, 1.0));
+scene.add(new THREE.HemisphereLight(0x87CEEB, 0x3a8a1a, 0.7));
+const fill = new THREE.DirectionalLight(0xffd4a0, 0.5);
+fill.position.set(-15, 10, -10); scene.add(fill);
 
-// Lumière bleue nocturne
-const fill = new THREE.DirectionalLight(0x4466aa, 0.4);
-fill.position.set(-10, 5, -10);
-scene.add(fill);
+// Sol herbe
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshLambertMaterial({ color:0x5aaa32 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
 
-// --- Sol ---
-const groundGeo = new THREE.PlaneGeometry(60, 60, 20, 20);
-const groundMat = new THREE.MeshLambertMaterial({ color: 0x2d4a1e });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
-
-// Grille de rues
-const gridHelper = new THREE.GridHelper(60, 20, 0x3a5a2a, 0x3a5a2a);
-gridHelper.position.y = 0.01;
-scene.add(gridHelper);
-
-// --- Helpers de construction ---
-function box(w, h, d, color, emissive = 0x000000) {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const mat = new THREE.MeshLambertMaterial({ color, emissiveIntensity: 0.3 });
-  if (emissive) mat.emissive = new THREE.Color(emissive);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow    = true;
-  mesh.receiveShadow = true;
-  return mesh;
+// Routes
+function road(w, h, x, z) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ color:0xc8b89a }));
+  m.rotation.x = -Math.PI/2; m.position.set(x, 0.01, z); m.receiveShadow = true; scene.add(m);
 }
+for (let i = -1; i <= 4; i++) { road(100, 0.8, 0, i*3.5-0.5); road(0.8, 100, i*3.5-0.5, 0); }
 
-function addWindows(parent, buildingW, buildingH, buildingD, floors, cols, color = 0xaaddf0) {
-  const wW = 0.18, wH = 0.22;
-  const spacingX = buildingW / (cols + 1);
-  const spacingY = buildingH / (floors + 1);
-  const mat = new THREE.MeshLambertMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: 0.6 });
-  for (let f = 0; f < floors; f++) {
-    for (let c = 0; c < cols; c++) {
-      const geo = new THREE.BoxGeometry(wW, wH, 0.02);
-      const w = new THREE.Mesh(geo, mat);
-      w.position.set(
-        -buildingW/2 + spacingX*(c+1),
-        -buildingH/2 + spacingY*(f+1),
-        buildingD/2 + 0.01
-      );
-      parent.add(w);
-      // Face arrière aussi
-      const w2 = w.clone();
-      w2.position.z = -buildingD/2 - 0.01;
-      w2.rotation.y = Math.PI;
-      parent.add(w2);
-    }
+// Trottoirs
+for (let i = -1; i <= 4; i++) {
+  for (let j = -1; j <= 4; j++) {
+    const curb = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), new THREE.MeshLambertMaterial({ color:0xddccbb }));
+    curb.rotation.x = -Math.PI/2; curb.position.set(i*3.5-0.5, 0.015, j*3.5-0.5); scene.add(curb);
   }
 }
 
-// --- Définitions des bâtiments 3D ---
+// Nuages
+function cloud(x, y, z, s) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color:0xffffff });
+  [[0,0,0,1.5,.7,1.3],[1.3,.1,0,1.,.6,1.],[-.9,.05,0,.9,.5,.9],[.4,.45,0,.75,.48,.75],[-1.4,-.05,-.3,.7,.4,.7]].forEach(([px,py,pz,sx,sy,sz]) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1,7,5), mat);
+    m.scale.set(sx,sy,sz); m.position.set(px,py,pz); g.add(m);
+  });
+  g.position.set(x,y,z); g.scale.setScalar(s); scene.add(g); return g;
+}
+const clouds = [cloud(-12,20,-6,2.2),cloud(6,24,-14,2.6),cloud(20,21,3,1.9),cloud(-6,27,12,2.3),cloud(28,20,-10,1.7),cloud(2,18,20,2.0)];
+
+// Arbres
+function tree(x, z) {
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshLambertMaterial({ color:0x7a4a20 });
+  const leafMat  = new THREE.MeshLambertMaterial({ color:new THREE.Color(0.15+Math.random()*.1, 0.55+Math.random()*.15, 0.15+Math.random()*.05) });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.11,.17,.9,6), trunkMat);
+  trunk.position.y = .45; trunk.castShadow = true; g.add(trunk);
+  [[.45,1.8],[.58,1.15],[.4,1.45]].forEach(([r,y],i) => {
+    const h = [.9,.7,.55][i];
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r,h,7), leafMat);
+    cone.position.y = y; cone.castShadow = true; g.add(cone);
+  });
+  g.position.set(x, 0, z);
+  g.scale.setScalar(.85+Math.random()*.3);
+  scene.add(g);
+}
+[[-3.5,-3.5],[-3.5,0],[-3.5,3.5],[-3.5,7],[-3.5,10.5],[-3.5,14],
+ [0,-3.5],[3.5,-3.5],[7,-3.5],[10.5,-3.5],[14,-3.5],
+ [0,14],[3.5,14],[7,14],[10.5,14],[14,14],
+ [17.5,-3.5],[17.5,0],[17.5,3.5],[17.5,7],[17.5,10.5],[17.5,14],
+ [-7,3],[-7,7],[20,3],[20,7]].forEach(([x,z]) => tree(x,z));
+
+// Bancs et lampadaires
+function bench(x, z) {
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(.7,.06,.25), new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+  seat.position.y = .3; g.add(seat);
+  [-0.28,0.28].forEach(lx => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(.06,.3,.06), new THREE.MeshLambertMaterial({color:0x555}));
+    leg.position.set(lx,.15,0); g.add(leg);
+  });
+  g.position.set(x,.0,z); scene.add(g);
+}
+function lamp(x, z) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,2.2,6), new THREE.MeshLambertMaterial({color:0x666}));
+  pole.position.y = 1.1; g.add(pole);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(.14,8,8), new THREE.MeshLambertMaterial({color:0xffffcc, emissive:new THREE.Color(0xffff88), emissiveIntensity:.8}));
+  head.position.y = 2.3; g.add(head);
+  g.position.set(x,0,z); scene.add(g);
+}
+[[-.8,-.8],[-.8,3.2],[-.8,6.7],[3.2,-.8],[6.7,-.8]].forEach(([x,z]) => lamp(x,z));
+[[1.2,-.4],[4.7,-.4],[1.2,3.1]].forEach(([x,z]) => bench(x,z));
+
+// ============================================
+//  Bâtiments
+// ============================================
+function box3(w,h,d,color) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color}));
+  m.castShadow = m.receiveShadow = true; return m;
+}
+function wins(parent, bW,bH,bD, floors,cols, wc=0xaad4f5) {
+  const mat = new THREE.MeshLambertMaterial({color:wc, emissive:new THREE.Color(wc), emissiveIntensity:.12});
+  const sX=bW/(cols+1), sY=bH/(floors+1);
+  for (let f=0;f<floors;f++) for (let c=0;c<cols;c++) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(.2,.26,.03), mat);
+    w.position.set(-bW/2+sX*(c+1), -bH/2+sY*(f+1), bD/2+.02); parent.add(w);
+    const w2=w.clone(); w2.position.z=-bD/2-.02; w2.rotation.y=Math.PI; parent.add(w2);
+  }
+}
+
 const BUILDERS = {
-  tent(group) {
-    const pole = box(0.05, 1.4, 0.05, 0x8B4513);
-    pole.position.y = 0.7;
-    group.add(pole);
-    const geo = new THREE.ConeGeometry(1, 1.2, 4);
-    const mat = new THREE.MeshLambertMaterial({ color: 0xe8c87a });
-    const cone = new THREE.Mesh(geo, mat);
-    cone.position.y = 1.5;
-    cone.rotation.y = Math.PI/4;
-    cone.castShadow = true;
-    group.add(cone);
+  tent(g) {
+    const trunk=box3(.07,.95,.07,0x8B5E3C); trunk.position.y=.47; g.add(trunk);
+    const cone=new THREE.Mesh(new THREE.ConeGeometry(.95,1.15,4),new THREE.MeshLambertMaterial({color:0xf5c842}));
+    cone.rotation.y=Math.PI/4; cone.position.y=1.3; cone.castShadow=true; g.add(cone);
+    const door=box3(.22,.36,.04,0x8B4513); door.position.set(0,.18,.67); g.add(door);
   },
-
-  house(group) {
-    const walls = box(1.6, 1, 1.6, 0xd9795b);
-    walls.position.y = 0.5;
-    group.add(walls);
-    const geo = new THREE.ConeGeometry(1.3, 0.8, 4);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x9b3a2a });
-    const roof = new THREE.Mesh(geo, mat);
-    roof.position.y = 1.4;
-    roof.rotation.y = Math.PI/4;
-    roof.castShadow = true;
-    group.add(roof);
-    const door = box(0.3, 0.5, 0.05, 0x5a3010);
-    door.position.set(0, 0.25, 0.83);
-    group.add(door);
+  house(g) {
+    const walls=box3(1.8,1.1,1.8,0xf5dfa0); walls.position.y=.55; g.add(walls);
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(1.5,.95,4),new THREE.MeshLambertMaterial({color:0xcc3311}));
+    roof.rotation.y=Math.PI/4; roof.position.y=1.58; roof.castShadow=true; g.add(roof);
+    [[-.5,.62,.91],[.5,.62,.91]].forEach(([x,y,z])=>{ const w=box3(.3,.3,.04,0xaad4f5); w.position.set(x,y,z); g.add(w); });
+    const door=box3(.32,.56,.04,0x8B4513); door.position.set(0,.28,.91); g.add(door);
+    const ch=box3(.2,.42,.2,0xcc8855); ch.position.set(.42,1.82,.2); ch.castShadow=true; g.add(ch);
   },
-
-  shop(group) {
-    const base = box(2, 1.4, 2, 0x6a9ec9);
-    base.position.y = 0.7;
-    group.add(base);
-    addWindows(base, 2, 1.4, 2, 1, 2, 0xfff0a0);
-    const sign = box(1.4, 0.3, 0.05, 0xff6633);
-    sign.position.set(0, 1.2, 1.02);
-    const signMat = new THREE.MeshLambertMaterial({ color: 0xff6633, emissive: new THREE.Color(0xff3300), emissiveIntensity: 0.4 });
-    sign.material = signMat;
-    group.add(sign);
-    const awning = box(2.2, 0.06, 0.6, 0xcc4400);
-    awning.position.set(0, 0.9, 1.3);
-    awning.rotation.x = 0.3;
-    group.add(awning);
+  shop(g) {
+    const base=box3(2.2,1.6,2.,0x4a9fd4); base.position.y=.8; g.add(base);
+    wins(base,2.2,1.6,2.,1,2,0xfff5cc);
+    const roof=box3(2.4,.12,2.2,0x2a7ab0); roof.position.y=1.66; g.add(roof);
+    const awn=box3(2.5,.08,.72,0xff6622); awn.position.set(0,1.,.135); awn.rotation.x=.25; g.add(awn);
+    const sign=box3(1.5,.32,.06,0xff8800); sign.position.set(0,1.3,1.04); g.add(sign);
+    const door=box3(.38,.65,.04,0x1a4a6a); door.position.set(0,.32,1.01); g.add(door);
   },
-
-  flat(group) {
-    const base = box(2, 5, 2, 0x8a7fc9);
-    base.position.y = 2.5;
-    group.add(base);
-    addWindows(base, 2, 5, 2, 5, 2);
-    const roof = box(2.2, 0.15, 2.2, 0x6a5fa9);
-    roof.position.y = 5.07;
-    group.add(roof);
-    // Antenne
-    const ant = box(0.04, 0.6, 0.04, 0x444);
-    ant.position.set(0.6, 5.6, 0.6);
-    group.add(ant);
+  flat(g) {
+    const soc=box3(2.2,.25,2.2,0xddccbb); soc.position.y=.12; g.add(soc);
+    const main=box3(2.,5.5,2.,0xf0e0c0); main.position.y=3.; g.add(main);
+    wins(main,2.,5.5,2.,6,2,0xaad4f5);
+    for(let f=0;f<3;f++){const bal=box3(2.2,.08,.4,0xccbbaa); bal.position.set(0,.8+f*1.7,1.2); g.add(bal);}
+    const roof=box3(2.2,.18,2.2,0xbbaa99); roof.position.y=6.09; g.add(roof);
+    const ant=box3(.04,.7,.04,0x888); ant.position.set(.5,6.55,.5); g.add(ant);
   },
-
-  factory(group) {
-    const main = box(3, 2, 2.5, 0x888);
-    main.position.y = 1;
-    group.add(main);
-    // Cheminées
-    [[0.8, 1.4], [-0.8, 1.8]].forEach(([ox, h]) => {
-      const ch = box(0.3, h, 0.3, 0x666);
-      ch.position.set(ox, h/2 + 2, 0);
-      group.add(ch);
-      const smoke = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.25, 0.15, 0.3, 8),
-        new THREE.MeshLambertMaterial({ color: 0x555, transparent: true, opacity: 0.6 })
-      );
-      smoke.position.set(ox, h + 2.3, 0);
-      group.add(smoke);
+  factory(g) {
+    const main=box3(3.2,2.2,2.8,0xb8b8b8); main.position.y=1.1; g.add(main);
+    wins(main,3.2,2.2,2.8,1,3,0xffdd88);
+    for(let i=0;i<3;i++){const s=box3(.9,.5,2.8,0xaaa); s.position.set(-1+i*1.,2.45,0); g.add(s);}
+    [[1.,2.],[-.8,2.5]].forEach(([ox,h])=>{
+      const ch=box3(.35,h,.35,0x888); ch.position.set(ox,2.2+h/2,0); ch.castShadow=true; g.add(ch);
+      const sm=new THREE.Mesh(new THREE.CylinderGeometry(.22,.14,.4,8),new THREE.MeshLambertMaterial({color:0xccc,transparent:true,opacity:.45}));
+      sm.position.set(ox,2.2+h+.3,0); g.add(sm);
     });
-    // Fenêtres atelier
-    addWindows(main, 3, 2, 2.5, 1, 3, 0xffd080);
+    const door=box3(.8,.9,.05,0x777); door.position.set(.6,.45,1.41); g.add(door);
   },
-
-  town_hall(group) {
-    const base = box(3.5, 2.5, 3, 0xc9a84c);
-    base.position.y = 1.25;
-    group.add(base);
-    addWindows(base, 3.5, 2.5, 3, 2, 3, 0xfff0a0);
-    // Colonnes
-    [-1.2, -0.4, 0.4, 1.2].forEach(ox => {
-      const col = box(0.2, 2.5, 0.2, 0xd9b86c);
-      col.position.set(ox, 1.25, 1.6);
-      group.add(col);
+  town_hall(g) {
+    // Escaliers d'entrée
+    const steps=box3(3.,.18,3.6,0xeeddbb); steps.position.set(0,.09,0); g.add(steps);
+    const steps2=box3(3.6,.18,4.2,0xe8d8aa); steps2.position.set(0,-.09,0); g.add(steps2);
+    // Corps principal
+    const base=box3(3.6,2.6,3.2,0xf8ecc8); base.position.y=1.48; g.add(base);
+    wins(base,3.6,2.6,3.2,2,3,0xfff5aa);
+    // 6 colonnes en façade
+    [-1.3,-.42,.42,1.3].forEach(ox=>{
+      const col=box3(.2,2.6,.2,0xfffaee); col.position.set(ox,1.48,1.7); g.add(col);
+      // Chapiteau
+      const cap=box3(.32,.12,.32,0xeedd99); cap.position.set(ox,2.84,1.7); g.add(cap);
     });
-    // Fronton triangulaire
-    const geo = new THREE.CylinderGeometry(0, 2.2, 1, 3);
-    const mat = new THREE.MeshLambertMaterial({ color: 0xb09030 });
-    const ped = new THREE.Mesh(geo, mat);
-    ped.position.y = 3;
-    ped.rotation.y = Math.PI/6;
-    ped.castShadow = true;
-    group.add(ped);
-    // Dôme
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(0.6, 12, 8, 0, Math.PI*2, 0, Math.PI/2),
-      new THREE.MeshLambertMaterial({ color: 0x7ec8e3, emissive: new THREE.Color(0x336688), emissiveIntensity: 0.3 })
-    );
-    dome.position.y = 4.2;
-    dome.castShadow = true;
-    group.add(dome);
+    // Fronton triangulaire plat (pas conique)
+    const pedL=box3(.08,1.,.08,0xeedd99); pedL.position.set(-1.9,3.28,1.7); pedL.rotation.z=.72; g.add(pedL);
+    const pedR=box3(.08,1.,.08,0xeedd99); pedR.position.set( 1.9,3.28,1.7); pedR.rotation.z=-.72; g.add(pedR);
+    const pedTop=box3(.08,.08,.08,0xeedd99); pedTop.position.set(0,3.78,1.7); g.add(pedTop);
+    const pedBase=box3(3.9,.1,.1,0xeedd99); pedBase.position.set(0,2.82,1.7); g.add(pedBase);
+    // Attique (bloc au-dessus du corps)
+    const attic=box3(3.2,.5,2.8,0xf0ddb0); attic.position.y=2.95; g.add(attic);
+    // Tambour (cylindre sous le dôme)
+    const drum=new THREE.Mesh(new THREE.CylinderGeometry(.72,.72,.55,16),new THREE.MeshLambertMaterial({color:0xeedd99}));
+    drum.position.y=3.47; drum.castShadow=true; g.add(drum);
+    // Dôme propre
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(.72,16,12,0,Math.PI*2,0,Math.PI/2),new THREE.MeshLambertMaterial({color:0x4ecdc4}));
+    dome.position.y=3.98; dome.castShadow=true; g.add(dome);
+    // Lanterne sur le dôme
+    const lantern=box3(.22,.3,.22,0xeedd99); lantern.position.y=4.76; g.add(lantern);
+    // Drapeau
+    const pole=box3(.04,.9,.04,0x888); pole.position.set(0,5.35,0); g.add(pole);
+    const flag=box3(.44,.28,.03,0xff3333); flag.position.set(.24,5.65,0); g.add(flag);
+    // Porte centrale double
+    const door=box3(.5,.75,.05,0x8B4513); door.position.set(0,.37,1.61); g.add(door);
+    const arch=new THREE.Mesh(new THREE.CylinderGeometry(.26,.26,.05,10,1,false,0,Math.PI),new THREE.MeshLambertMaterial({color:0x8B4513}));
+    arch.rotation.z=-Math.PI/2; arch.position.set(0,1.02,1.61); g.add(arch);
   },
-
-  tower(group) {
-    // Base large
-    const base = box(2, 1, 2, 0x5b9ea0);
-    base.position.y = 0.5;
-    group.add(base);
-    // Corps principal effilé
-    const shaft = box(1.2, 10, 1.2, 0x5b9ea0);
-    shaft.position.y = 6;
-    group.add(shaft);
-    addWindows(shaft, 1.2, 10, 1.2, 9, 2);
-    // Couronnement
-    const crown = box(1.6, 0.3, 1.6, 0x4a8a8e);
-    crown.position.y = 11.15;
-    group.add(crown);
-    // Antenne lumineuse
-    const ant = box(0.04, 1.5, 0.04, 0x888);
-    ant.position.y = 12.15;
-    group.add(ant);
-    const light = new THREE.Mesh(
-      new THREE.SphereGeometry(0.08, 6, 6),
-      new THREE.MeshLambertMaterial({ color: 0xff2222, emissive: new THREE.Color(0xff0000), emissiveIntensity: 1 })
-    );
-    light.position.y = 13;
-    group.add(light);
+  tower(g) {
+    const base=box3(2.4,.8,2.4,0xc8c0b8); base.position.y=.4; g.add(base);
+    [[1.6,3.,1.6,0xe8e0d8,2.3],[1.2,3.,1.2,0xddd5cc,5.3],[.9,3.,.9,0xd0c8bf,8.3],[.7,2.,.7,0xc8c0b8,11.]].forEach(([w,h,d,col,y])=>{
+      const s=box3(w,h,d,col); s.position.y=y; wins(s,w,h,d,Math.floor(h),1,0xaad4f5); g.add(s);
+    });
+    const crown=box3(1.,.3,1.,0xaaa8a0); crown.position.y=12.15; g.add(crown);
+    const ant=box3(.05,1.8,.05,0x999); ant.position.y=13.2; g.add(ant);
+    const light=new THREE.Mesh(new THREE.SphereGeometry(.1,8,8),new THREE.MeshLambertMaterial({color:0xff2222,emissive:new THREE.Color(0xff0000),emissiveIntensity:1.5}));
+    light.position.y=14.15; g.add(light);
   },
-
-  cathedral(group) {
-    // Nef
-    const nave = box(2.5, 3, 5, 0xb06a8a);
-    nave.position.y = 1.5;
-    group.add(nave);
-    // Tour centrale
-    const tower = box(1.4, 6, 1.4, 0x9a5a78);
-    tower.position.y = 4;
-    group.add(tower);
-    // Flèche
-    const geo = new THREE.ConeGeometry(0.9, 3, 4);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x7a3a58 });
-    const spire = new THREE.Mesh(geo, mat);
-    spire.position.y = 8.5;
-    spire.rotation.y = Math.PI/4;
-    spire.castShadow = true;
-    group.add(spire);
-    // Rosace (vitrail)
-    const rose = new THREE.Mesh(
-      new THREE.CircleGeometry(0.5, 16),
-      new THREE.MeshLambertMaterial({ color: 0xffd080, emissive: new THREE.Color(0xff8800), emissiveIntensity: 0.6 })
-    );
-    rose.position.set(0, 2.5, 2.51);
-    group.add(rose);
-    addWindows(nave, 2.5, 3, 5, 2, 2, 0x80ccff);
+  cathedral(g) {
+    const nave=box3(3.,3.5,6.,0xd4c4e8); nave.position.y=1.75; g.add(nave);
+    wins(nave,3.,3.5,6.,2,2,0x88ccff);
+    const tower=box3(1.6,7.,1.6,0xc4b4d8); tower.position.y=4.8; g.add(tower);
+    const spire=new THREE.Mesh(new THREE.ConeGeometry(1.,3.5,4),new THREE.MeshLambertMaterial({color:0x9a7ab4}));
+    spire.position.y=9.75; spire.rotation.y=Math.PI/4; spire.castShadow=true; g.add(spire);
+    [[-1.5,3.2,0],[1.5,3.2,0]].forEach(([x,y,z])=>{
+      const st=box3(.7,2.5,.7,0xc4b4d8); st.position.set(x,y,z); g.add(st);
+      const ss=new THREE.Mesh(new THREE.ConeGeometry(.45,1.2,4),new THREE.MeshLambertMaterial({color:0x9a7ab4}));
+      ss.position.set(x,y+1.85,z); ss.rotation.y=Math.PI/4; ss.castShadow=true; g.add(ss);
+    });
+    const rose=new THREE.Mesh(new THREE.CircleGeometry(.55,16),new THREE.MeshLambertMaterial({color:0xffcc44,emissive:new THREE.Color(0xff8800),emissiveIntensity:.6}));
+    rose.position.set(0,2.8,3.01); g.add(rose);
+    const door=box3(.5,.9,.05,0x5a3070); door.position.set(0,.45,3.01); g.add(door);
   }
 };
 
-// --- Placement des bâtiments ---
+const buildingGroups = [];
+const LABELS = {tent:'Tente',house:'Maison',shop:'Épicerie',flat:'Immeuble',factory:'Usine',town_hall:'Mairie',tower:'Tour',cathedral:'Cathédrale'};
+
 BUILDINGS_DATA.forEach((b, i) => {
-  const group = new THREE.Group();
-  const builder = BUILDERS[b.type] || BUILDERS['tent'];
-  builder(group);
+  const g = new THREE.Group();
+  if (BUILDERS[b.type]) BUILDERS[b.type](g);
+  g.position.set(b.pos_x*3.5, -5, b.pos_z*3.5);
+  g.userData.label = LABELS[b.type] || b.type;
+  scene.add(g);
+  buildingGroups.push(g);
 
-  // Position sur la grille (chaque case = 3.5 unités)
-  group.position.set(b.pos_x * 3.5, 0, b.pos_z * 3.5);
-
-  // Animation d'apparition légère
-  group.scale.set(0.01, 0.01, 0.01);
-  scene.add(group);
-
-  // Apparition progressive avec délai
-  const delay = i * 120;
   setTimeout(() => {
-    let t = 0;
-    const grow = setInterval(() => {
-      t += 0.06;
-      const s = Math.min(1, t);
-      group.scale.set(s, s, s);
-      if (s >= 1) clearInterval(grow);
+    const rise = setInterval(() => {
+      const dy = (0 - g.position.y) * .14;
+      g.position.y += dy;
+      if (Math.abs(g.position.y) < .015) { g.position.y = 0; clearInterval(rise); }
     }, 16);
-  }, delay);
+  }, i * 160);
 });
 
-// --- Contrôle caméra à la souris ---
-let isDragging = false, lastX = 0, lastY = 0;
-let theta = 0.8, phi = 0.9, radius = 22;
-const target = new THREE.Vector3(6, 0, 6);
+// ============================================
+//  Caméra orbitale
+// ============================================
+let drag=false, lx=0, ly=0, theta=0.78, phi=0.82, radius=26;
+const target = new THREE.Vector3(7, 0, 7);
 
-renderer.domElement.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
-renderer.domElement.addEventListener('mouseup',   () => { isDragging = false; });
-renderer.domElement.addEventListener('mousemove', e => {
-  if (!isDragging) return;
-  theta -= (e.clientX - lastX) * 0.006;
-  phi    = Math.max(0.25, Math.min(1.4, phi - (e.clientY - lastY) * 0.006));
-  lastX = e.clientX; lastY = e.clientY;
-  updateCamera();
-});
-renderer.domElement.addEventListener('wheel', e => {
-  radius = Math.max(8, Math.min(50, radius + e.deltaY * 0.05));
-  updateCamera();
-});
-
-// Touch support
-renderer.domElement.addEventListener('touchstart', e => { isDragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; });
-renderer.domElement.addEventListener('touchend',   () => { isDragging = false; });
-renderer.domElement.addEventListener('touchmove',  e => {
-  if (!isDragging) return;
-  theta -= (e.touches[0].clientX - lastX) * 0.006;
-  phi    = Math.max(0.25, Math.min(1.4, phi - (e.touches[0].clientY - lastY) * 0.006));
-  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-  updateCamera();
-});
-
-function updateCamera() {
+function updateCam() {
   camera.position.set(
-    target.x + radius * Math.sin(phi) * Math.sin(theta),
-    target.y + radius * Math.cos(phi),
-    target.z + radius * Math.sin(phi) * Math.cos(theta)
+    target.x + radius*Math.sin(phi)*Math.sin(theta),
+    target.y + radius*Math.cos(phi),
+    target.z + radius*Math.sin(phi)*Math.cos(theta)
   );
   camera.lookAt(target);
 }
-updateCamera();
+renderer.domElement.addEventListener('mousedown', e=>{drag=true;lx=e.clientX;ly=e.clientY;});
+window.addEventListener('mouseup', ()=>drag=false);
+window.addEventListener('mousemove', e=>{
+  if(!drag)return;
+  theta-=(e.clientX-lx)*.005; phi=Math.max(.18,Math.min(1.3,phi-(e.clientY-ly)*.005));
+  lx=e.clientX;ly=e.clientY; updateCam();
+});
+renderer.domElement.addEventListener('wheel', e=>{radius=Math.max(7,Math.min(60,radius+e.deltaY*.04));updateCam();},{passive:true});
+renderer.domElement.addEventListener('touchstart',e=>{drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;});
+window.addEventListener('touchend',()=>drag=false);
+window.addEventListener('touchmove',e=>{if(!drag)return;theta-=(e.touches[0].clientX-lx)*.005;phi=Math.max(.18,Math.min(1.3,phi-(e.touches[0].clientY-ly)*.005));lx=e.touches[0].clientX;ly=e.touches[0].clientY;updateCam();});
+updateCam();
 
-// --- Toast auto-dismiss ---
-setTimeout(() => {
-  const toast = document.getElementById('toast');
-  if (toast) toast.classList.add('hidden');
-}, 4000);
+// Tooltip raycaster
+const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
+const tooltip=document.getElementById('tooltip');
+window.addEventListener('mousemove', e=>{
+  mouse.x=(e.clientX/W)*2-1; mouse.y=-(e.clientY/H)*2+1;
+  tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-10)+'px';
+});
 
-// --- Boucle de rendu ---
-let time = 0;
+// Boucle
+const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
-  time += 0.01;
-  // Légère oscillation du soleil (cycle jour/nuit très lent)
-  sun.intensity = 1.2 + 0.2 * Math.sin(time * 0.05);
+  const dt = clock.getDelta();
+  clouds.forEach((c,i)=>{ c.position.x+=.018*(1+i*.08); if(c.position.x>45) c.position.x=-45; });
+
+  raycaster.setFromCamera(mouse, camera);
+  const meshes=[];
+  buildingGroups.forEach(g=>g.traverse(c=>{if(c.isMesh)meshes.push(c);}));
+  const hits=raycaster.intersectObjects(meshes);
+  if(hits.length){
+    let o=hits[0].object; while(o.parent&&!o.userData.label)o=o.parent;
+    if(o.userData.label){tooltip.textContent=o.userData.label;tooltip.classList.add('visible');}
+  } else { tooltip.classList.remove('visible'); }
+
   renderer.render(scene, camera);
 }
 animate();
 
-// --- Resize ---
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+setTimeout(()=>document.getElementById('toast').classList.add('hidden'), 4500);
+window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);});
 </script>
 </body>
 </html>

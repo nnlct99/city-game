@@ -1,0 +1,53 @@
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#87CEEB; font-family:'Segoe UI',sans-serif; overflow:hidden; }
+
+#hud {
+  position:fixed; top:0; left:0; right:0; z-index:20;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 24px;
+  background:rgba(255,255,255,0.88);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(0,0,0,0.07);
+  box-shadow:0 2px 16px rgba(0,0,0,0.07);
+}
+#hud h1 { font-size:17px; font-weight:700; color:#2c3e50; letter-spacing:-.01em; }
+#hud h1 span { font-size:13px; color:#aaa; font-weight:400; margin-left:8px; }
+
+.stats { display:flex; gap:24px; }
+.stat { text-align:center; }
+.stat-val { font-size:20px; font-weight:700; color:#e67e22; line-height:1; }
+.stat-lbl { font-size:10px; color:#bbb; text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+.nav-links { display:flex; gap:14px; align-items:center; }
+.nav-links a { font-size:13px; color:#999; text-decoration:none; transition:color .2s; }
+.nav-links a:hover { color:#e67e22; }
+
+#toast {
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+  background:white; border-radius:12px; padding:12px 28px;
+  font-size:14px; font-weight:500; color:#2c3e50;
+  box-shadow:0 6px 28px rgba(0,0,0,0.13); z-index:30;
+  transition:opacity .6s ease; border-left:4px solid #e67e22;
+  white-space:nowrap;
+}
+#toast.new-building { border-left-color:#27ae60; animation:pop .45s cubic-bezier(.17,.67,.35,1.4); }
+#toast.hidden { opacity:0; pointer-events:none; }
+@keyframes pop { 0%{transform:translateX(-50%) scale(.8)} 100%{transform:translateX(-50%) scale(1)} }
+
+#next-info {
+  position:fixed; bottom:28px; right:20px; z-index:20;
+  background:white; border-radius:10px; padding:10px 16px;
+  font-size:13px; color:#888; box-shadow:0 4px 18px rgba(0,0,0,0.1);
+}
+#next-info strong { color:#e67e22; }
+
+#tooltip {
+  position:fixed; pointer-events:none; z-index:25;
+  background:white; border-radius:8px; padding:7px 13px;
+  font-size:13px; font-weight:500; color:#2c3e50;
+  box-shadow:0 4px 16px rgba(0,0,0,0.13);
+  opacity:0; transition:opacity .15s;
+}
+#tooltip.visible { opacity:1; }
+
+#hint { position:fixed; bottom:28px; left:20px; z-index:20; font-size:12px; color:rgba(255,255,255,0.6); }
