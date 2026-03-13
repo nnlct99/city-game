@@ -29,7 +29,7 @@ $top = $pdo->query("SELECT * FROM leaderboard LIMIT 10")->fetchAll();
   .pop { color: #7ec8e3; font-weight: 600; }
   .cta { margin-top: 2rem; text-align:center; }
   .cta a { display:inline-block; padding: 10px 28px; border: 1px solid rgba(126,200,227,0.4); border-radius:6px; color:#7ec8e3; text-decoration:none; font-size:14px; }
-  .cta a:hover { background: rgba(126,200,227,0.1); }
+  .cta a:hover { background: white; }
 </style>
 </head>
 <body>
