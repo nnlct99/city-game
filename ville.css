@@ -51,3 +51,23 @@ body { background:#87CEEB; font-family:'Segoe UI',sans-serif; overflow:hidden; }
 #tooltip.visible { opacity:1; }
 
 #hint { position:fixed; bottom:28px; left:20px; z-index:20; font-size:12px; color:rgba(255,255,255,0.6); }
+
+#fps-hint {
+  position:fixed; bottom:28px; left:20px; z-index:20;
+  font-size:13px; color:rgba(255,255,255,0.85);
+  background:rgba(0,0,0,0.45); padding:8px 14px;
+  border-radius:8px; backdrop-filter:blur(4px);
+}
+#fps-hint strong { color:#fff; }
+
+/* Réticule FPS */
+#fps-hint::before {
+  content: '';
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.8);
+  border-radius: 50%;
+  pointer-events: none;
+}
